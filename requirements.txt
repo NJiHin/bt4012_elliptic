@@ -1,0 +1,10 @@
+pandas
+numpy
+matplotlib
+networkx
+scipy
+python-louvain
+pyvis
+torch
+torch-geometric
+scikit-learn
