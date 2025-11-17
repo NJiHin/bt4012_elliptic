@@ -8,3 +8,4 @@ pyvis
 torch
 torch-geometric
 scikit-learn
+xgboost
