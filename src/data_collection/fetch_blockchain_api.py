@@ -22,7 +22,7 @@ Output: processed_data/api_outputs.csv (created if doesn't exist)
 # ============================================================================
 
 # Input/Output files
-INPUT_FILE = 'raw_data/timestep_1_12.csv'          # CHANGE THIS TO YOUR FILE CSV with txId and transaction columns
+INPUT_FILE = 'raw_data/timestep_37_48_ivan.csv'          # CHANGE THIS TO YOUR FILE CSV with txId and transaction columns
 OUTPUT_FILE = 'processed_data/api_outputs.csv'  # Where to save results
 
 # API Settings
