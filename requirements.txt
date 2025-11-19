@@ -1,3 +1,4 @@
+# Core dependencies (install first)
 pandas
 numpy
 matplotlib
@@ -6,9 +7,16 @@ scipy
 python-louvain
 pyvis
 torch
-torch-geometric
 scikit-learn
 xgboost
 seaborn
 umap-learn
 tqdm
+
+# Graph dependencies (install after torch)
+torch-geometric
+
+# Temporal graph dependencies (install manually after other packages)
+# torch-geometric-temporal requires torch-sparse to be built, which fails in isolated pip builds
+# Install manually with: pip install torch-geometric-temporal --no-build-isolation
+# torch-geometric-temporal
