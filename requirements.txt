@@ -10,3 +10,5 @@ torch-geometric
 scikit-learn
 xgboost
 seaborn
+umap-learn
+tqdm
