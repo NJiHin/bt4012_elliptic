@@ -1,4 +1,8 @@
 raw_data/
 venv/
 processed_data/*.csv
+community_detection_data/*.csv
+
+# Blockchain API fetch script
+bt4012_elliptic/src/data_collection/fetch_blockchain_api.py
 src/data_collection/
