@@ -65,23 +65,39 @@ def build_timestep_graph(nodes_df, edges_df, timestep, sample_size=None):
 
     # Sample if requested (for performance)
     if sample_size and len(timestep_nodes) > sample_size:
-        # Separate fraudulent and non-fraudulent nodes
-        fraudulent = timestep_nodes[timestep_nodes['label'] == '1']  # All illicit nodes
-        licit = timestep_nodes[timestep_nodes['label'] == '2']
-        unknown = timestep_nodes[timestep_nodes['label'] == 'unknown']
+        # Step 1: Always include ALL fraudulent nodes
+        fraudulent = timestep_nodes[timestep_nodes['label'] == '1']
+        fraudulent_addresses = set(fraudulent['address'])
 
-        # Always include ALL fraudulent nodes
-        sampled_nodes = [fraudulent]
-        remaining_slots = sample_size - len(fraudulent)
+        # Step 2: Find all nodes connected to fraudulent nodes (1-hop neighbors)
+        # Get edges involving fraudulent nodes
+        fraudulent_edges = timestep_edges[
+            timestep_edges['source'].isin(fraudulent_addresses) |
+            timestep_edges['target'].isin(fraudulent_addresses)
+        ]
 
+        # Get all addresses connected to fraudulent nodes
+        connected_to_fraudulent = set(fraudulent_edges['source']) | set(fraudulent_edges['target'])
+        connected_to_fraudulent -= fraudulent_addresses  # Remove fraudulent nodes themselves
+
+        # Get the connected nodes
+        neighbors = timestep_nodes[timestep_nodes['address'].isin(connected_to_fraudulent)]
+
+        # Step 3: Combine fraudulent + neighbors
+        sampled_nodes = [fraudulent, neighbors]
+        remaining_slots = sample_size - len(fraudulent) - len(neighbors)
+
+        # Step 4: Sample remaining nodes if we haven't reached the limit
         if remaining_slots > 0:
-            # Sample from licit and unknown proportionally
-            non_fraudulent = pd.concat([licit, unknown])
-            if len(non_fraudulent) > remaining_slots:
-                sampled_non_fraudulent = non_fraudulent.sample(n=remaining_slots, random_state=42)
-                sampled_nodes.append(sampled_non_fraudulent)
+            # Get all other nodes (not fraudulent, not neighbors)
+            already_included = fraudulent_addresses | connected_to_fraudulent
+            remaining_nodes = timestep_nodes[~timestep_nodes['address'].isin(already_included)]
+
+            if len(remaining_nodes) > remaining_slots:
+                sampled_remaining = remaining_nodes.sample(n=remaining_slots, random_state=42)
+                sampled_nodes.append(sampled_remaining)
             else:
-                sampled_nodes.append(non_fraudulent)
+                sampled_nodes.append(remaining_nodes)
 
         timestep_nodes = pd.concat(sampled_nodes)
 
@@ -184,6 +200,11 @@ def create_pyvis_network(G, communities, timestep, color_by='label'):
             "navigationButtons": true,
             "keyboard": true
         },
+        "nodes": {
+            "font": {
+                "size": 0
+            }
+        },
         "edges": {
             "color": {
                 "color": "#666666",
@@ -261,7 +282,10 @@ def create_pyvis_network(G, communities, timestep, color_by='label'):
 def generate_timestep_files(nodes_df, edges_df, sample_size=None, color_by='label'):
     """Generate separate HTML file for each timestep."""
     if sample_size:
-        print(f"\nGenerating timestep files (sampling {sample_size} nodes, including ALL fraudulent)...")
+        print(f"\nGenerating timestep files (sampling {sample_size} nodes)...")
+        print("  - Including: ALL fraudulent nodes")
+        print("  - Including: ALL nodes connected to fraudulent nodes")
+        print("  - Random sample of remaining nodes")
     else:
         print(f"\nGenerating timestep files (full graphs - all nodes)...")
 
@@ -704,7 +728,7 @@ def main():
     print("  - Temporal slider to navigate timesteps")
     print("  - Playback controls")
     print("  - Node hover tooltips with detailed info")
-    print("  - Sampling: 5000 nodes/timestep (ALL fraudulent nodes always included)")
+    print("  - Smart sampling: ALL fraudulent + neighbors + random (5000 total)")
     print("  - Isolated nodes removed (only showing connected nodes)")
     print(f"\nOpen {index_file.name} in your browser to explore!")
 
