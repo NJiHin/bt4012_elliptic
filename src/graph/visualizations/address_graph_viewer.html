@@ -1,0 +1,321 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Address Graph Viewer - Louvain Communities</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f1115;
+            --panel-bg: rgba(30, 32, 38, 0.95);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --accent: #4444FF;
+            --accent-hover: #5555FF;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            overflow: hidden;
+        }
+
+        #graph-iframe {
+            width: 100vw;
+            height: 100vh;
+            border: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Sidebar */
+        #sidebar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 320px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            z-index: 10;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h1 i { color: var(--accent); }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .playback-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        button.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        button.primary:hover {
+            background: var(--accent-hover);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+
+        #timestep-display {
+            font-size: 24px;
+            font-weight: 500;
+            color: var(--accent);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            display: block;
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        #loader {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 17, 21, 0.9);
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            opacity: 0;
+        }
+
+        #loader.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-left-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="loader" class="active">
+        <div class="spinner"></div>
+        <p style="margin-top: 20px; color: var(--text-secondary);">Loading Graph...</p>
+    </div>
+
+    <div id="sidebar">
+        <h1><i class="fas fa-project-diagram"></i> Address Graph</h1>
+
+        <div class="control-group">
+            <div class="label">Timeline</div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                <div id="timestep-display">T-1</div>
+                <div class="playback-controls">
+                    <button id="btn-prev"><i class="fas fa-step-backward"></i></button>
+                    <button id="btn-next"><i class="fas fa-step-forward"></i></button>
+                </div>
+            </div>
+            <input type="range" id="timestep-slider" min="1" max="49" value="1" step="1">
+        </div>
+
+        <div class="control-group">
+            <div class="label">Statistics</div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-nodes">0</span>
+                    <span class="stat-label">Nodes</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-edges">0</span>
+                    <span class="stat-label">Edges</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-communities">0</span>
+                    <span class="stat-label">Communities</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-illicit">0</span>
+                    <span class="stat-label">Illicit</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <div class="label">Legend</div>
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                <span><span class="legend-dot" style="background: #FF4444"></span>Illicit</span>
+                <span><span class="legend-dot" style="background: #4444FF"></span>Licit</span>
+                <span><span class="legend-dot" style="background: #FFDD44"></span>Unknown</span>
+            </div>
+        </div>
+    </div>
+
+    <iframe id="graph-iframe" src=""></iframe>
+
+    <script>
+        const timestepStats = {"1": {"nodes": 1164, "edges": 1197, "communities": 310, "illicit": 42, "licit": 472, "unknown": 650}, "2": {"nodes": 2067, "edges": 3061, "communities": 269, "illicit": 38, "licit": 257, "unknown": 1772}, "3": {"nodes": 1525, "edges": 2196, "communities": 360, "illicit": 26, "licit": 320, "unknown": 1179}, "4": {"nodes": 1808, "edges": 2178, "communities": 309, "illicit": 157, "licit": 473, "unknown": 1178}, "5": {"nodes": 1495, "edges": 1717, "communities": 327, "illicit": 25, "licit": 288, "unknown": 1182}, "6": {"nodes": 1222, "edges": 1785, "communities": 318, "illicit": 5, "licit": 148, "unknown": 1069}, "7": {"nodes": 1508, "edges": 1743, "communities": 285, "illicit": 218, "licit": 305, "unknown": 985}, "8": {"nodes": 1592, "edges": 1886, "communities": 250, "illicit": 75, "licit": 583, "unknown": 934}, "9": {"nodes": 1553, "edges": 1985, "communities": 185, "illicit": 330, "licit": 175, "unknown": 1048}, "10": {"nodes": 827, "edges": 816, "communities": 234, "illicit": 10, "licit": 155, "unknown": 662}, "11": {"nodes": 1738, "edges": 2189, "communities": 180, "illicit": 124, "licit": 201, "unknown": 1413}, "12": {"nodes": 1038, "edges": 1071, "communities": 128, "illicit": 31, "licit": 241, "unknown": 766}, "13": {"nodes": 1292, "edges": 1476, "communities": 130, "illicit": 265, "licit": 173, "unknown": 854}, "14": {"nodes": 504, "edges": 497, "communities": 126, "illicit": 48, "licit": 148, "unknown": 308}, "15": {"nodes": 1288, "edges": 2408, "communities": 110, "illicit": 148, "licit": 150, "unknown": 990}, "16": {"nodes": 863, "edges": 903, "communities": 124, "illicit": 127, "licit": 159, "unknown": 577}, "17": {"nodes": 1137, "edges": 1246, "communities": 149, "illicit": 96, "licit": 276, "unknown": 765}, "18": {"nodes": 617, "edges": 752, "communities": 114, "illicit": 52, "licit": 159, "unknown": 406}, "19": {"nodes": 794, "edges": 744, "communities": 156, "illicit": 79, "licit": 194, "unknown": 521}, "20": {"nodes": 1247, "edges": 1491, "communities": 132, "illicit": 302, "licit": 170, "unknown": 775}, "21": {"nodes": 1719, "edges": 2824, "communities": 134, "illicit": 575, "licit": 212, "unknown": 932}, "22": {"nodes": 1768, "edges": 2950, "communities": 193, "illicit": 645, "licit": 283, "unknown": 840}, "23": {"nodes": 1453, "edges": 1733, "communities": 183, "illicit": 339, "licit": 329, "unknown": 785}, "24": {"nodes": 1433, "edges": 1988, "communities": 171, "illicit": 443, "licit": 184, "unknown": 806}, "25": {"nodes": 2388, "edges": 4668, "communities": 152, "illicit": 1042, "licit": 259, "unknown": 1087}, "26": {"nodes": 1471, "edges": 2304, "communities": 135, "illicit": 650, "licit": 205, "unknown": 616}, "27": {"nodes": 921, "edges": 1004, "communities": 91, "illicit": 24, "licit": 195, "unknown": 702}, "28": {"nodes": 610, "edges": 627, "communities": 109, "illicit": 84, "licit": 72, "unknown": 454}, "29": {"nodes": 1173, "edges": 1167, "communities": 164, "illicit": 168, "licit": 174, "unknown": 831}, "30": {"nodes": 972, "edges": 943, "communities": 142, "illicit": 98, "licit": 237, "unknown": 637}, "31": {"nodes": 1156, "edges": 1143, "communities": 173, "illicit": 64, "licit": 283, "unknown": 809}, "32": {"nodes": 1997, "edges": 2787, "communities": 173, "illicit": 624, "licit": 485, "unknown": 888}, "33": {"nodes": 2009, "edges": 7988, "communities": 139, "illicit": 256, "licit": 302, "unknown": 1451}, "34": {"nodes": 1506, "edges": 2714, "communities": 162, "illicit": 420, "licit": 251, "unknown": 835}, "35": {"nodes": 1847, "edges": 2299, "communities": 230, "illicit": 370, "licit": 354, "unknown": 1123}, "36": {"nodes": 2056, "edges": 3158, "communities": 166, "illicit": 578, "licit": 827, "unknown": 651}, "37": {"nodes": 1564, "edges": 1854, "communities": 173, "illicit": 398, "licit": 325, "unknown": 841}, "38": {"nodes": 1446, "edges": 1642, "communities": 179, "illicit": 152, "licit": 266, "unknown": 1028}, "39": {"nodes": 1758, "edges": 2082, "communities": 203, "illicit": 91, "licit": 384, "unknown": 1283}, "40": {"nodes": 2519, "edges": 4380, "communities": 165, "illicit": 352, "licit": 733, "unknown": 1434}, "41": {"nodes": 1937, "edges": 2254, "communities": 273, "illicit": 122, "licit": 534, "unknown": 1281}, "42": {"nodes": 1916, "edges": 2857, "communities": 204, "illicit": 292, "licit": 703, "unknown": 921}, "43": {"nodes": 1815, "edges": 3661, "communities": 249, "illicit": 64, "licit": 634, "unknown": 1117}, "44": {"nodes": 1777, "edges": 3216, "communities": 253, "illicit": 239, "licit": 497, "unknown": 1041}, "45": {"nodes": 1982, "edges": 4195, "communities": 283, "illicit": 20, "licit": 734, "unknown": 1228}, "46": {"nodes": 2146, "edges": 3675, "communities": 238, "illicit": 506, "licit": 643, "unknown": 997}, "47": {"nodes": 2278, "edges": 5889, "communities": 350, "illicit": 167, "licit": 888, "unknown": 1223}, "48": {"nodes": 2019, "edges": 3810, "communities": 301, "illicit": 318, "licit": 622, "unknown": 1079}, "49": {"nodes": 3282, "edges": 11355, "communities": 358, "illicit": 541, "licit": 720, "unknown": 2021}};
+        const minTimestep = 1;
+        const maxTimestep = 49;
+
+        let currentTimestep = minTimestep;
+        let isPlaying = false;
+        let playInterval = null;
+
+        const iframe = document.getElementById('graph-iframe');
+        const slider = document.getElementById('timestep-slider');
+        const display = document.getElementById('timestep-display');
+        const loader = document.getElementById('loader');
+
+        function updateTimestep(timestep) {
+            currentTimestep = timestep;
+            slider.value = timestep;
+            display.textContent = `T-${timestep}`;
+
+            // Show loader
+            loader.classList.add('active');
+
+            // Load timestep HTML in iframe
+            iframe.src = `address_graphs/timestep_${timestep}.html`;
+
+            // Update stats
+            const stats = timestepStats[timestep.toString()];
+            if (stats) {
+                document.getElementById('stat-nodes').textContent = stats.nodes.toLocaleString();
+                document.getElementById('stat-edges').textContent = stats.edges.toLocaleString();
+                document.getElementById('stat-communities').textContent = stats.communities;
+                document.getElementById('stat-illicit').textContent = stats.illicit;
+            }
+        }
+
+        slider.addEventListener('input', (e) => {
+            updateTimestep(parseInt(e.target.value));
+        });
+
+        document.getElementById('btn-prev').addEventListener('click', () => {
+            if (currentTimestep > minTimestep) updateTimestep(currentTimestep - 1);
+        });
+
+        document.getElementById('btn-next').addEventListener('click', () => {
+            if (currentTimestep < maxTimestep) updateTimestep(currentTimestep + 1);
+        });
+
+        // Hide loader when iframe loads
+        iframe.addEventListener('load', () => {
+            setTimeout(() => loader.classList.remove('active'), 300);
+        });
+
+        // Initial load
+        window.addEventListener('load', () => {
+            updateTimestep(minTimestep);
+        });
+    </script>
+</body>
+</html>
