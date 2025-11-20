@@ -1,0 +1,345 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Address Graph Viewer - Louvain Communities</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f1115;
+            --panel-bg: rgba(30, 32, 38, 0.95);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --accent: #4444FF;
+            --accent-hover: #5555FF;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            overflow: hidden;
+        }
+
+        #graph-iframe {
+            width: 100vw;
+            height: 100vh;
+            border: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Sidebar */
+        #sidebar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 320px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            z-index: 10;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h1 i { color: var(--accent); }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .playback-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        button.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        button.primary:hover {
+            background: var(--accent-hover);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+
+        #timestep-display {
+            font-size: 24px;
+            font-weight: 500;
+            color: var(--accent);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            display: block;
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        #loader {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 17, 21, 0.9);
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            opacity: 0;
+        }
+
+        #loader.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-left-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="loader" class="active">
+        <div class="spinner"></div>
+        <p style="margin-top: 20px; color: var(--text-secondary);">Loading Graph...</p>
+    </div>
+
+    <div id="sidebar">
+        <h1><i class="fas fa-project-diagram"></i> Address Graph</h1>
+
+        <div class="control-group">
+            <div class="label">Timeline</div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                <div id="timestep-display">T-1</div>
+                <div class="playback-controls">
+                    <button id="btn-prev"><i class="fas fa-step-backward"></i></button>
+                    <button id="btn-play" class="primary"><i class="fas fa-play"></i></button>
+                    <button id="btn-next"><i class="fas fa-step-forward"></i></button>
+                </div>
+            </div>
+            <input type="range" id="timestep-slider" min="1" max="49" value="1" step="1">
+        </div>
+
+        <div class="control-group">
+            <div class="label">Statistics</div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-nodes">0</span>
+                    <span class="stat-label">Nodes</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-edges">0</span>
+                    <span class="stat-label">Edges</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-communities">0</span>
+                    <span class="stat-label">Communities</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-illicit">0</span>
+                    <span class="stat-label">Illicit</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <div class="label">Legend</div>
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                <span><span class="legend-dot" style="background: #FF4444"></span>Illicit</span>
+                <span><span class="legend-dot" style="background: #4444FF"></span>Licit</span>
+                <span><span class="legend-dot" style="background: #FFDD44"></span>Unknown</span>
+            </div>
+        </div>
+    </div>
+
+    <iframe id="graph-iframe" src=""></iframe>
+
+    <script>
+        const timestepStats = {"1": {"nodes": 1079, "edges": 938, "communities": 320, "illicit": 13, "licit": 365, "unknown": 701}, "2": {"nodes": 2300, "edges": 2785, "communities": 283, "illicit": 14, "licit": 220, "unknown": 2066}, "3": {"nodes": 1924, "edges": 2431, "communities": 395, "illicit": 10, "licit": 360, "unknown": 1554}, "4": {"nodes": 1516, "edges": 1795, "communities": 314, "illicit": 18, "licit": 351, "unknown": 1147}, "5": {"nodes": 1272, "edges": 1499, "communities": 326, "illicit": 10, "licit": 287, "unknown": 975}, "6": {"nodes": 1247, "edges": 1768, "communities": 316, "illicit": 1, "licit": 226, "unknown": 1020}, "7": {"nodes": 1166, "edges": 1259, "communities": 294, "illicit": 79, "licit": 277, "unknown": 810}, "8": {"nodes": 1525, "edges": 1788, "communities": 254, "illicit": 34, "licit": 418, "unknown": 1073}, "9": {"nodes": 1147, "edges": 1406, "communities": 218, "illicit": 205, "licit": 92, "unknown": 850}, "10": {"nodes": 840, "edges": 705, "communities": 210, "illicit": 6, "licit": 156, "unknown": 678}, "11": {"nodes": 766, "edges": 742, "communities": 191, "illicit": 41, "licit": 102, "unknown": 623}, "12": {"nodes": 827, "edges": 800, "communities": 136, "illicit": 5, "licit": 157, "unknown": 665}, "13": {"nodes": 464, "edges": 383, "communities": 151, "illicit": 61, "licit": 104, "unknown": 299}, "14": {"nodes": 520, "edges": 516, "communities": 116, "illicit": 22, "licit": 185, "unknown": 313}, "15": {"nodes": 772, "edges": 1598, "communities": 136, "illicit": 42, "licit": 171, "unknown": 559}, "16": {"nodes": 616, "edges": 526, "communities": 158, "illicit": 53, "licit": 155, "unknown": 408}, "17": {"nodes": 668, "edges": 606, "communities": 186, "illicit": 33, "licit": 184, "unknown": 451}, "18": {"nodes": 586, "edges": 609, "communities": 138, "illicit": 27, "licit": 206, "unknown": 353}, "19": {"nodes": 653, "edges": 563, "communities": 176, "illicit": 52, "licit": 192, "unknown": 409}, "20": {"nodes": 870, "edges": 863, "communities": 143, "illicit": 153, "licit": 98, "unknown": 619}, "21": {"nodes": 893, "edges": 1151, "communities": 118, "illicit": 130, "licit": 103, "unknown": 660}, "22": {"nodes": 990, "edges": 1144, "communities": 208, "illicit": 150, "licit": 222, "unknown": 618}, "23": {"nodes": 878, "edges": 742, "communities": 220, "illicit": 114, "licit": 263, "unknown": 501}, "24": {"nodes": 877, "edges": 774, "communities": 200, "illicit": 232, "licit": 127, "unknown": 518}, "25": {"nodes": 1479, "edges": 2114, "communities": 131, "illicit": 672, "licit": 171, "unknown": 636}, "26": {"nodes": 782, "edges": 732, "communities": 167, "illicit": 254, "licit": 115, "unknown": 413}, "27": {"nodes": 1220, "edges": 1291, "communities": 98, "illicit": 12, "licit": 239, "unknown": 969}, "28": {"nodes": 670, "edges": 719, "communities": 134, "illicit": 66, "licit": 86, "unknown": 518}, "29": {"nodes": 950, "edges": 943, "communities": 190, "illicit": 101, "licit": 133, "unknown": 716}, "30": {"nodes": 650, "edges": 570, "communities": 151, "illicit": 59, "licit": 118, "unknown": 473}, "31": {"nodes": 799, "edges": 847, "communities": 187, "illicit": 35, "licit": 218, "unknown": 546}, "32": {"nodes": 1093, "edges": 1219, "communities": 277, "illicit": 210, "licit": 260, "unknown": 623}, "33": {"nodes": 1639, "edges": 4892, "communities": 155, "illicit": 63, "licit": 274, "unknown": 1302}, "34": {"nodes": 950, "edges": 988, "communities": 209, "illicit": 200, "licit": 218, "unknown": 532}, "35": {"nodes": 1167, "edges": 1106, "communities": 270, "illicit": 144, "licit": 268, "unknown": 755}, "36": {"nodes": 1228, "edges": 1095, "communities": 236, "illicit": 106, "licit": 360, "unknown": 762}, "37": {"nodes": 1151, "edges": 1121, "communities": 205, "illicit": 114, "licit": 184, "unknown": 853}, "38": {"nodes": 791, "edges": 791, "communities": 191, "illicit": 88, "licit": 205, "unknown": 498}, "39": {"nodes": 1836, "edges": 1854, "communities": 203, "illicit": 58, "licit": 435, "unknown": 1343}, "40": {"nodes": 1170, "edges": 1395, "communities": 203, "illicit": 162, "licit": 551, "unknown": 457}, "41": {"nodes": 1169, "edges": 1182, "communities": 316, "illicit": 52, "licit": 329, "unknown": 788}, "42": {"nodes": 1405, "edges": 1550, "communities": 268, "illicit": 147, "licit": 512, "unknown": 746}, "43": {"nodes": 1587, "edges": 2284, "communities": 266, "illicit": 45, "licit": 557, "unknown": 985}, "44": {"nodes": 1429, "edges": 1982, "communities": 282, "illicit": 92, "licit": 458, "unknown": 879}, "45": {"nodes": 2080, "edges": 4371, "communities": 290, "illicit": 11, "licit": 702, "unknown": 1367}, "46": {"nodes": 2130, "edges": 2963, "communities": 294, "illicit": 503, "licit": 527, "unknown": 1100}, "47": {"nodes": 2277, "edges": 4941, "communities": 346, "illicit": 131, "licit": 874, "unknown": 1272}, "48": {"nodes": 2774, "edges": 4298, "communities": 267, "illicit": 83, "licit": 747, "unknown": 1944}, "49": {"nodes": 3227, "edges": 10771, "communities": 336, "illicit": 438, "licit": 783, "unknown": 2006}};
+        const minTimestep = 1;
+        const maxTimestep = 49;
+
+        let currentTimestep = minTimestep;
+        let isPlaying = false;
+        let playInterval = null;
+
+        const iframe = document.getElementById('graph-iframe');
+        const slider = document.getElementById('timestep-slider');
+        const display = document.getElementById('timestep-display');
+        const btnPlay = document.getElementById('btn-play');
+        const loader = document.getElementById('loader');
+
+        function updateTimestep(timestep) {
+            currentTimestep = timestep;
+            slider.value = timestep;
+            display.textContent = `T-${timestep}`;
+
+            // Show loader
+            loader.classList.add('active');
+
+            // Load timestep HTML in iframe
+            iframe.src = `address_graphs/timestep_${timestep}.html`;
+
+            // Update stats
+            const stats = timestepStats[timestep.toString()];
+            if (stats) {
+                document.getElementById('stat-nodes').textContent = stats.nodes.toLocaleString();
+                document.getElementById('stat-edges').textContent = stats.edges.toLocaleString();
+                document.getElementById('stat-communities').textContent = stats.communities;
+                document.getElementById('stat-illicit').textContent = stats.illicit;
+            }
+        }
+
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            const icon = btnPlay.querySelector('i');
+
+            if (isPlaying) {
+                icon.className = 'fas fa-pause';
+                playInterval = setInterval(() => {
+                    if (currentTimestep < maxTimestep) {
+                        updateTimestep(currentTimestep + 1);
+                    } else {
+                        togglePlay();
+                    }
+                }, 2000);
+            } else {
+                icon.className = 'fas fa-play';
+                clearInterval(playInterval);
+            }
+        }
+
+        slider.addEventListener('input', (e) => {
+            if (isPlaying) togglePlay();
+            updateTimestep(parseInt(e.target.value));
+        });
+
+        btnPlay.addEventListener('click', togglePlay);
+
+        document.getElementById('btn-prev').addEventListener('click', () => {
+            if (currentTimestep > minTimestep) updateTimestep(currentTimestep - 1);
+        });
+
+        document.getElementById('btn-next').addEventListener('click', () => {
+            if (currentTimestep < maxTimestep) updateTimestep(currentTimestep + 1);
+        });
+
+        // Hide loader when iframe loads
+        iframe.addEventListener('load', () => {
+            setTimeout(() => loader.classList.remove('active'), 300);
+        });
+
+        // Initial load
+        window.addEventListener('load', () => {
+            updateTimestep(minTimestep);
+        });
+    </script>
+</body>
+</html>
