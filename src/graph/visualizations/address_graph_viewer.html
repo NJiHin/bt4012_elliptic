@@ -220,7 +220,6 @@
                 <div id="timestep-display">T-1</div>
                 <div class="playback-controls">
                     <button id="btn-prev"><i class="fas fa-step-backward"></i></button>
-                    <button id="btn-play" class="primary"><i class="fas fa-play"></i></button>
                     <button id="btn-next"><i class="fas fa-step-forward"></i></button>
                 </div>
             </div>
@@ -273,7 +272,6 @@
         const iframe = document.getElementById('graph-iframe');
         const slider = document.getElementById('timestep-slider');
         const display = document.getElementById('timestep-display');
-        const btnPlay = document.getElementById('btn-play');
         const loader = document.getElementById('loader');
 
         function updateTimestep(timestep) {
@@ -297,31 +295,9 @@
             }
         }
 
-        function togglePlay() {
-            isPlaying = !isPlaying;
-            const icon = btnPlay.querySelector('i');
-
-            if (isPlaying) {
-                icon.className = 'fas fa-pause';
-                playInterval = setInterval(() => {
-                    if (currentTimestep < maxTimestep) {
-                        updateTimestep(currentTimestep + 1);
-                    } else {
-                        togglePlay();
-                    }
-                }, 2000);
-            } else {
-                icon.className = 'fas fa-play';
-                clearInterval(playInterval);
-            }
-        }
-
         slider.addEventListener('input', (e) => {
-            if (isPlaying) togglePlay();
             updateTimestep(parseInt(e.target.value));
         });
-
-        btnPlay.addEventListener('click', togglePlay);
 
         document.getElementById('btn-prev').addEventListener('click', () => {
             if (currentTimestep > minTimestep) updateTimestep(currentTimestep - 1);
