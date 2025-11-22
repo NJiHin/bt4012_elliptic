@@ -1,6 +1,6 @@
 raw_data/
 venv/
-processed_data/*.csv
+processed_data/**/*.csv
 community_detection_data/*.
 engineered_data/
 
